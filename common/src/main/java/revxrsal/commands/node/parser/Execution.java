@@ -57,7 +57,7 @@ final class Execution<A extends CommandActor> implements ExecutableCommand<A> {
     private final boolean isSecret;
     private final String description, usage;
     private final OptionalInt priority;
-    private final String siblingPath;
+    private final String[] siblingPath;
     private final String path;
     private final int flagCount;
     private final boolean lowPriority;
@@ -114,8 +114,8 @@ final class Execution<A extends CommandActor> implements ExecutableCommand<A> {
         return joiner.toString();
     }
 
-    private @NotNull String computeSiblingPath() {
-        StringJoiner joiner = new StringJoiner(" ");
+    private @NotNull String[] computeSiblingPath() {
+        List<String> path = new ArrayList<>();
         int index = 0;
         for (int i = nodes.size() - 1; i >= 0; i--) {
             CommandNode<A> n = nodes.get(i);
@@ -124,11 +124,20 @@ final class Execution<A extends CommandActor> implements ExecutableCommand<A> {
                 break;
             }
         }
-        for (int i = 0; i < index; i++) {
-            CommandNode<A> n = nodes.get(i);
-            joiner.add(n.representation());
+        if (index == 0) {
+            // This is a top-level command: the sibling path should be the
+            // actual command label.
+            CommandNode<A> n = nodes.get(0);
+            if (!n.isLiteral())
+                throw new IllegalArgumentException("The command does not start with a literal.");
+            path.add(n.representation());
+        } else {
+            for (int i = 0; i < index; i++) {
+                CommandNode<A> n = nodes.get(i);
+                path.add(n.representation());
+            }
         }
-        return joiner.toString();
+        return path.toArray(new String[0]);
     }
 
     @Override
@@ -243,8 +252,11 @@ final class Execution<A extends CommandActor> implements ExecutableCommand<A> {
     }
 
     @Override public boolean isSiblingOf(@NotNull ExecutableCommand<A> command) {
-        String otherPath = ((Execution<A>) command).siblingPath;
-        return command != this && otherPath.startsWith(siblingPath) || siblingPath.startsWith(otherPath);
+        if (command == this)
+            return false;
+
+        String[] otherPath = ((Execution<A>) command).siblingPath;
+        return Arrays.equals(siblingPath, otherPath);
     }
 
     @Override public boolean isChildOf(@NotNull ExecutableCommand<A> command) {
